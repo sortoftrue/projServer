@@ -1,24 +1,13 @@
 package com.james.projServer.Repositories;
 
-import java.math.BigDecimal;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
-import java.time.LocalDateTime;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.List;
-import java.util.Optional;
-
-import org.apache.commons.codec.cli.Digest;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.rowset.SqlRowSet;
 import org.springframework.stereotype.Repository;
-
-import com.james.projServer.Models.Post;
-import com.james.projServer.Services.callGoogle;
 
 @Repository
 public class SQLUserRepo {
@@ -27,11 +16,15 @@ public class SQLUserRepo {
     JdbcTemplate template;
 
     private final String GET_HASHED_PW = """
-            SELECT hash from users where username = ?;
+            SELECT hash,user_id from users where username = ?;
                 """;
 
     private final String GET_USER_ID = """
             SELECT user_id from users where username = ?;
+                """;
+
+    private final String GET_USERNAME = """
+            SELECT username from users where user_id = ?;
                 """;
 
     private final String CREATE_USER= """
@@ -72,21 +65,30 @@ public class SQLUserRepo {
     }
             
 
-    public Boolean verifyLogin(String user, String password){
+    public Integer verifyLogin(String user, String password){
        
         String hashedPass;
-
+        System.out.println(password);
         final SqlRowSet rs = template.queryForRowSet(GET_HASHED_PW, user);
         if(rs.first()){
             System.out.println("hashed pass found!" + rs.getString(1));
             hashedPass = rs.getString(1);
             System.out.println(DigestUtils.md5Hex(password));
-        } else return false;
+        } else return 0;
 
         if(DigestUtils.md5Hex(password).equals(hashedPass)){
-            return true;
-        } else return false;
+            return rs.getInt(2);
+        } else return 0;
 
     }
 
+    public String getUsername (String userId){
+
+        final SqlRowSet rs = template.queryForRowSet(GET_USERNAME, Integer.parseInt(userId));
+        if(rs.first()){
+            System.out.println("username found!" + rs.getString(1));
+            return rs.getString(1);
+        } else return null;
+
+    }
 }
