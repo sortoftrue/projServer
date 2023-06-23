@@ -24,9 +24,12 @@ import com.james.projServer.Models.Post;
 import com.james.projServer.Repositories.ImageRepository;
 import com.james.projServer.Repositories.SQLRepo;
 import com.james.projServer.Repositories.SQLUserRepo;
-import com.james.projServer.Services.verifyGoogleToken;
+import com.james.projServer.Services.GoogleCalendar;
+import com.james.projServer.Services.appToken;
+import com.james.projServer.Services.VerifyGoogleToken;
 
 import jakarta.json.Json;
+import jakarta.json.JsonArray;
 
 @RestController
 public class UploadController {
@@ -40,7 +43,11 @@ public class UploadController {
     @Autowired
     RedisTemplate<String, String> redis;
     @Autowired
-    verifyGoogleToken googleTokenSvc;
+    VerifyGoogleToken googleTokenSvc;
+    @Autowired
+    appToken appTokenSvc;
+    @Autowired
+    GoogleCalendar calendarSvc;
 
     @PostMapping(path = "/upload")
     public ResponseEntity<String> uploadPost(@RequestPart(required = false) MultipartFile[] images,
@@ -83,28 +90,63 @@ public class UploadController {
     }
 
     @GetMapping(path = "/post/{post_id}")
-    public ResponseEntity<String> getPost(@PathVariable String post_id) {
+    public ResponseEntity<String> getPost(@PathVariable String post_id,
+            @RequestHeader(value = "token", required = false) String token) {
 
-        System.out.println("request received!");
-        Optional<Post> opt = sqlRepo.getPostById(Integer.parseInt(post_id));
+        System.out.println("post request received!" + token);
 
-        if (opt.isEmpty()) {
-            return ResponseEntity.status(404).body(
-                    Json.createObjectBuilder().add("error_message", "Cannot find post").build().toString());
+        // check Redis if token is still valid. if valid, retrieve username from Repo
+        // if not valid, erase client's token.
+
+        if (token != null) {
+            String returnedId = redis.opsForValue().get(token);
+
+            if (returnedId != null) {
+                Optional<Post> opt = sqlRepo.getPostByIdWithUserId(Integer.parseInt(post_id),
+                        Integer.parseInt(returnedId));
+
+                if (opt.isEmpty()) {
+                    Optional<Post> noViewerPost = sqlRepo.getPostById(Integer.parseInt(post_id));
+
+                    if (noViewerPost.isEmpty()) {
+                        return ResponseEntity.status(404).body(
+                                Json.createObjectBuilder().add("error_message", "Cannot find post").build().toString());
+                    }
+                    return ResponseEntity.ok().body(noViewerPost.get().toJSON().toString());
+                }
+                return ResponseEntity.ok().body(opt.get().toJSON().toString());
+            }
+
+            Optional<Post> opt = sqlRepo.getPostById(Integer.parseInt(post_id));
+
+            if (opt.isEmpty()) {
+                return ResponseEntity.status(404).body(
+                        Json.createObjectBuilder().add("error_message", "Cannot find post").build().toString());
+            }
+            return ResponseEntity.ok().body(opt.get().toJSON().toString());
+
+        } else {
+            // if no token, get post without ID
+            Optional<Post> opt = sqlRepo.getPostById(Integer.parseInt(post_id));
+
+            if (opt.isEmpty()) {
+                return ResponseEntity.status(404).body(
+                        Json.createObjectBuilder().add("error_message", "Cannot find post").build().toString());
+            }
+            return ResponseEntity.ok().body(opt.get().toJSON().toString());
         }
 
-        return ResponseEntity.ok().body(opt.get().toJSON().toString());
     }
 
     @PostMapping(path = "/user/login")
     public ResponseEntity<String> userLogin(@RequestHeader("user") String user,
             @RequestHeader("password") String password) {
-        String authToken;
+
+        // check username and password in repo
         Integer retrievedId = userRepo.verifyLogin(user, password);
 
         if (retrievedId != 0) {
-            authToken = UUID.randomUUID().toString();
-            redis.opsForValue().set(authToken, Integer.toString(retrievedId));
+            String authToken = appTokenSvc.createAndStoreToken(retrievedId);
             return ResponseEntity.status(200).body(
                     Json.createObjectBuilder().add("userId", Integer.toString(retrievedId)).add("token", authToken)
                             .build().toString());
@@ -130,6 +172,9 @@ public class UploadController {
     public ResponseEntity<String> verifyLogIn(@RequestHeader("token") String token) {
         System.out.println("Verifying token");
 
+        // check Redis if token is still valid. if valid, retrieve username from Repo
+        // if not valid, erase client's token.
+
         String returnedId = redis.opsForValue().get(token);
 
         if (returnedId != null) {
@@ -137,7 +182,7 @@ public class UploadController {
             return ResponseEntity.ok().body(
                     Json.createObjectBuilder().add("userId", returnedId).add("username", username).build().toString());
         } else {
-            return ResponseEntity.badRequest().body(Json.createObjectBuilder().add("userId", "0").build().toString());
+            return ResponseEntity.ok().body(Json.createObjectBuilder().add("userId", "0").build().toString());
         }
 
     }
@@ -156,17 +201,74 @@ public class UploadController {
         GoogleUser user;
         try {
             Optional<GoogleUser> opt = googleTokenSvc.verify(credentials);
+
             if (opt.isPresent()) {
                 user = opt.get();
-                return ResponseEntity.ok().body(Json.createObjectBuilder().add("status", "User Found").add("email", user.getEmail())
-                        .add("name", user.getName()).build().toString());
+
+                Integer retrievedId = userRepo.getUserIdFromGmail(user.getEmail());
+
+                // check if gmail exists in user database
+                // if doesnt, create account, then issue token
+                // if it does, issue token
+                if (retrievedId == 0) {
+                    Integer createdId = userRepo.createGoogleUser(user.getName(), user.getEmail());
+
+                    String authToken = appTokenSvc.createAndStoreToken(createdId);
+
+                    return ResponseEntity.ok()
+                            .body(Json.createObjectBuilder().add("status", "User Found").add("name", user.getName())
+                                    .add("token", authToken).build().toString());
+                } else {
+                    String authToken = appTokenSvc.createAndStoreToken(retrievedId);
+
+                    return ResponseEntity.ok()
+                            .body(Json.createObjectBuilder().add("status", "User Found").add("name", user.getName())
+                                    .add("token", authToken).build().toString());
+                }
+
             } else {
-                return ResponseEntity.badRequest().body(Json.createObjectBuilder().add("status", "Not Found").build().toString());
+                return ResponseEntity.badRequest().body(
+                        Json.createObjectBuilder().add("status", "Not able to verify Google user").build().toString());
             }
         } catch (GeneralSecurityException | IOException e) {
             // TODO Auto-generated catch block
             e.printStackTrace();
-            return ResponseEntity.badRequest().body(Json.createObjectBuilder().add("status", "Unable to verify").build().toString());
+            return ResponseEntity.badRequest()
+                    .body(Json.createObjectBuilder().add("status", "Unable to verify").build().toString());
+        }
+
+    }
+
+    @GetMapping(path = "/calendar/list")
+    public ResponseEntity<String> getGoogleCalendars(@RequestHeader String token) {
+
+        JsonArray calendarList = calendarSvc.getCalendars(token);
+
+        return ResponseEntity.ok().body(calendarList.toString());
+    }
+
+    @PostMapping(path = "/calendar/insert")
+    public ResponseEntity<String> insertCalendarEvent(@RequestPart String time, @RequestPart String date,
+            @RequestPart String calendarId, @RequestHeader String token) {
+
+        System.out.println(time + date + calendarId);
+
+        calendarSvc.insertEvent(calendarId, date, time, "test", token);
+
+        return null;
+    }
+
+    @PostMapping(path = "/post/vote")
+    public void postVote(@RequestHeader String vote, @RequestHeader String token, @RequestHeader String postId, @RequestHeader String postVoteChange) {
+
+        Integer parsedVote = Integer.parseInt(vote);
+
+        System.out.println("PARSEDVOTE"+ parsedVote);
+        // check Redis if token is still valid. if valid, retrieve username from Repo
+
+        String returnedId = redis.opsForValue().get(token);
+        if(returnedId!=null){
+            sqlRepo.handleVote(parsedVote,Integer.parseInt(postId),Integer.parseInt(returnedId),Integer.parseInt(postVoteChange));
         }
 
     }

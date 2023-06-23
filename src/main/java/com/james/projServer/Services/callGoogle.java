@@ -14,7 +14,7 @@ import jakarta.json.JsonReader;
 import jakarta.json.JsonString;
 
 @Service
-public class callGoogle {
+public class CallGoogle {
 
     // @Value("${GOOGLEAPIKEY}")
     String apiKey = "AIzaSyBV4lDFRmFpznvR0O6ys8DT9tjzurjDLmc";

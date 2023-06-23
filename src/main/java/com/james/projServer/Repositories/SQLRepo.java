@@ -14,13 +14,13 @@ import org.springframework.jdbc.support.rowset.SqlRowSet;
 import org.springframework.stereotype.Repository;
 
 import com.james.projServer.Models.Post;
-import com.james.projServer.Services.callGoogle;
+import com.james.projServer.Services.CallGoogle;
 
 @Repository
 public class SQLRepo {
 
     @Autowired
-    callGoogle googSvc;
+    CallGoogle googSvc;
 
     @Autowired
     JdbcTemplate template;
@@ -40,14 +40,33 @@ public class SQLRepo {
             (?,?,?)
                 """;
 
-    private final String INSERT_REST= """
+    private final String INSERT_REST = """
             insert into restaurants (gplace_id, name, rest_desc) values
             (?,?,?)
                 """;
 
+    private final String INSERT_VOTE = """
+            insert into votes (post_id, user_id, vote) values (?,?,?)
+            """;
+    
+    private final String UPDATE_USER_VOTE="""
+            update votes set vote = ? where post_id = ? and user_id = ?
+            """;
+
+    private final String UPDATE_POST_VOTE="""
+            update posts set votes = votes + ? where post_id = ?;
+            """;
+
     private final String GET_POST = """
             SELECT * from posts where post_id = ?;
                 """;
+
+    private final String GET_POST_WITH_ID = """
+            select *
+            from posts
+            join votes on posts.post_id = votes.post_id
+            where votes.user_id = ? and votes.post_id = ?
+                        """;
 
     private final String GET_GPLACE = """
             SELECT rest_id from restaurants where gplace_id = ?;
@@ -68,10 +87,10 @@ public class SQLRepo {
     }
 
     public Integer createPostMap(String title, String review, String gplaceId, String rating) {
-        //check if gplace is created
+        // check if gplace is created
         int rest_id;
         Optional<Integer> restOpt = getRestId(gplaceId);
-        if (restOpt.isPresent()){
+        if (restOpt.isPresent()) {
             rest_id = restOpt.get();
         } else {
             rest_id = createRest(gplaceId);
@@ -146,17 +165,33 @@ public class SQLRepo {
 
         final SqlRowSet rs = template.queryForRowSet(GET_POST, postId);
         final SqlRowSet photoRs = template.queryForRowSet(GET_PHOTOS, postId);
-        if(rs.first()){
+        if (rs.first()) {
             post.populate(rs, photoRs);
             return Optional.of(post);
         }
-        
+
         return Optional.empty();
     }
 
-    public Optional<Integer> getRestId(String gplace_id){
+    public Optional<Post> getPostByIdWithUserId(Integer postId, Integer userId) {
+
+        System.out.println("GETTING POST WITH POST" + postId + "USERID" + userId);
+        Post post = new Post();
+
+        final SqlRowSet rs = template.queryForRowSet(GET_POST_WITH_ID, userId, postId);
+        final SqlRowSet photoRs = template.queryForRowSet(GET_PHOTOS, postId);
+        if (rs.first()) {
+            post.populate(rs, photoRs);
+            return Optional.of(post);
+        }
+
+        return Optional.empty();
+    }
+
+
+    public Optional<Integer> getRestId(String gplace_id) {
         final SqlRowSet rs = template.queryForRowSet(GET_GPLACE, gplace_id);
-        if(rs.first()){
+        if (rs.first()) {
             System.out.println("found rest!" + rs.getInt(1));
             return Optional.of(rs.getInt(1));
         }
@@ -164,8 +199,8 @@ public class SQLRepo {
         return Optional.empty();
     }
 
-    public Integer createRest(String gplace_id){
-        //Get gplace name
+    public Integer createRest(String gplace_id) {
+        // Get gplace name
         String restName = googSvc.getGplaceName(gplace_id)[0];
         String summary = googSvc.getGplaceName(gplace_id)[1];
 
@@ -179,7 +214,7 @@ public class SQLRepo {
             PreparedStatement preparedStatement = conn.prepareStatement(INSERT_REST, Statement.RETURN_GENERATED_KEYS);
 
             // Set parameters
-            preparedStatement.setString(1,gplace_id);
+            preparedStatement.setString(1, gplace_id);
             preparedStatement.setString(2, restName);
             preparedStatement.setString(3, summary);
 
@@ -191,6 +226,33 @@ public class SQLRepo {
         Integer id = generatedKeyHolder.getKey().intValue();
 
         return id;
+    }
+
+    public void handleVote(Integer vote,Integer postId, Integer userId, Integer postVoteChange){
+        //check if vote entry exists
+        final SqlRowSet rs = template.queryForRowSet(GET_POST_WITH_ID, userId, postId);
+        
+        if (rs.first()) {
+            System.out.println("Vote found, updating vote");
+            if(vote==-1){
+                template.update(UPDATE_USER_VOTE,-1,postId,userId);
+            } else if(vote==1){
+                template.update(UPDATE_USER_VOTE,1,postId,userId);
+            } else if(vote == 0){
+                template.update(UPDATE_USER_VOTE,0,postId,userId);
+            }
+        } else{
+            System.out.println("Vote not found, creating vote");
+            //create vote with vote.
+            if(vote==-1){
+                template.update(INSERT_VOTE,postId,userId,-1);
+            } else if(vote==1){
+                template.update(INSERT_VOTE,postId,userId,1);
+            }
+        }
+        
+        template.update(UPDATE_POST_VOTE,postVoteChange,postId);
+
     }
 
 }

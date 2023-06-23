@@ -9,6 +9,7 @@ import org.springframework.jdbc.support.rowset.SqlRowSet;
 import jakarta.json.Json;
 import jakarta.json.JsonArrayBuilder;
 import jakarta.json.JsonObject;
+import jakarta.json.JsonObjectBuilder;
 
 public class Post {
     
@@ -22,6 +23,7 @@ public class Post {
     String restId;
     Integer userId;
     List<String> photoURLs = new LinkedList<>();
+    Integer viewerVote;
 
     public void populate (SqlRowSet rs, SqlRowSet photoRs){
 
@@ -34,6 +36,10 @@ public class Post {
         setNonRegRestName(rs.getString("nonreg_rest_name"));
         setRestId(rs.getString("rest_id"));
         setUserId(rs.getInt("user_id"));
+        try{
+            setViewerVote(rs.getInt("vote"));
+            System.out.println("viewer votes" + viewerVote);
+        } catch(Exception e){}
 
         while(photoRs.next()){
             photoURLs.add(photoRs.getString("photo_url"));
@@ -46,8 +52,8 @@ public class Post {
         for(String photoURL : photoURLs){
             ab.add(photoURL);
         }
-        JsonObject result = Json.createObjectBuilder()
-				.add("post_id",post_id)
+        JsonObjectBuilder builder = Json.createObjectBuilder()
+                .add("post_id",post_id)
 				.add("date", post_date.toString())
 				.add("title", title)
 				.add("review", review)
@@ -56,10 +62,24 @@ public class Post {
                 //.add("nonRegRestName",nonRegRestName)
                 //.add("restId",restId)
                 .add("user_id",userId)
-				.add("urls", ab)
-				.build();
+				.add("urls", ab);
+
+            System.out.println("json viewer votes" + viewerVote);
+        if(viewerVote != null){
+            builder = builder.add("viewerVote", viewerVote);
+        }
+
+        JsonObject result = builder.build();
 
         return result;
+    }
+    
+    public Integer getViewerVote() {
+        return viewerVote;
+    }
+
+    public void setViewerVote(Integer viewerVote) {
+        this.viewerVote = viewerVote;
     }
 
     public Integer getPost_id() {

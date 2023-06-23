@@ -16,7 +16,7 @@ import com.james.projServer.Models.GoogleUser;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
 
 @Service
-public class verifyGoogleToken {
+public class VerifyGoogleToken {
 
     public Optional<GoogleUser> verify(String googleCredential) throws GeneralSecurityException, IOException {
 
