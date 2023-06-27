@@ -46,17 +46,17 @@ public class AppConfig {
 
    //<<<<<<<<<<<<<<<<<<<<<REDIS STUFF>>>>>>>>>>>>>>>>>>>>>
 
-//    @Value("${spring.redis.host}")
-    private String redisHost = "localhost";
+   @Value("${spring.redis.host}")
+    private String redisHost;
 
-    // @Value("${spring.redis.port}")
-    private int redisPort = 6379;
+    @Value("${spring.redis.port}")
+    private int redisPort;
 
-    // @Value("${spring.redis.username}")
-    // private String redisUsername;
+    @Value("${spring.redis.username}")
+    private String redisUsername;
 
-    // @Value("${spring.redis.password}")
-    // private String redisPassword;
+    @Value("${spring.redis.password}")
+    private String redisPassword;
 
     @Bean @Primary
     public RedisTemplate<String, String> createRedisTemplate() {
@@ -65,8 +65,8 @@ public class AppConfig {
                 redisHost, redisPort);
         config.setDatabase(0);
 
-            // config.setUsername(redisUsername);
-            // config.setPassword(redisPassword);
+            config.setUsername(redisUsername);
+            config.setPassword(redisPassword);
 
         // System.out.println(redisPort + redisHost + redisUsername + redisPassword);
 

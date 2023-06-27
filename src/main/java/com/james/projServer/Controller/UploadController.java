@@ -30,6 +30,8 @@ import com.james.projServer.Services.VerifyGoogleToken;
 
 import jakarta.json.Json;
 import jakarta.json.JsonArray;
+import jakarta.json.JsonArrayBuilder;
+import jakarta.json.JsonObject;
 
 @RestController
 public class UploadController {
@@ -53,9 +55,9 @@ public class UploadController {
     public ResponseEntity<String> uploadPost(@RequestPart(required = false) MultipartFile[] images,
             @RequestPart String title, @RequestPart(required = false) String review,
             @RequestPart(required = false) String restName, @RequestPart(required = false) String restId,
-            @RequestPart(required = false) String rating, @RequestPart String isGoogle) {
+            @RequestPart(required = false) String rating, @RequestPart String isGoogle, @RequestPart String userId) {
 
-        System.out.println(title + review + restName + restId + rating + isGoogle);
+        System.out.println(title + review + restName + restId + rating + isGoogle + userId);
 
         // for (MultipartFile image : images) {
         // System.out.println(image.getOriginalFilename());
@@ -69,9 +71,11 @@ public class UploadController {
         Integer createdPostId;
         Boolean chkGoogle = isGoogle.equals("1");
         if (chkGoogle) {
-            createdPostId = sqlRepo.createPostMap(title, review, restId, rating);
+            System.out.println("creating google");
+            createdPostId = sqlRepo.createPostMap(title, review, restId, rating, Integer.parseInt(userId));
         } else {
-            createdPostId = sqlRepo.createPostNoMap(title, review, restName, rating);
+            System.out.println("creating non-google");
+            createdPostId = sqlRepo.createPostNoMap(title, review, restName, rating, Integer.parseInt(userId));
         }
 
         // Upload to Ocean and Create photos in SQL
@@ -161,11 +165,15 @@ public class UploadController {
             @RequestHeader("password") String password) {
 
         Boolean createdId = userRepo.createUser(user, password);
+        System.out.println(createdId);
         if (createdId) {
-            ResponseEntity.ok().body("User created!");
+            System.out.println("Return success");
+            return ResponseEntity.ok().body(Json.createObjectBuilder().add("status","user created")
+                            .build().toString());
         }
 
-        return ResponseEntity.ok().body("User already exists");
+        return ResponseEntity.status(400).body(Json.createObjectBuilder().add("status","user exists")
+                            .build().toString());
     }
 
     @GetMapping(path = "/user/verifyToken")
@@ -249,11 +257,11 @@ public class UploadController {
 
     @PostMapping(path = "/calendar/insert")
     public ResponseEntity<String> insertCalendarEvent(@RequestPart String time, @RequestPart String date,
-            @RequestPart String calendarId, @RequestHeader String token) {
+            @RequestPart String calendarId, @RequestHeader String token, @RequestPart String location) {
 
         System.out.println(time + date + calendarId);
 
-        calendarSvc.insertEvent(calendarId, date, time, "test", token);
+        calendarSvc.insertEvent(calendarId, date, time, location, token);
 
         return null;
     }
@@ -271,6 +279,28 @@ public class UploadController {
             sqlRepo.handleVote(parsedVote,Integer.parseInt(postId),Integer.parseInt(returnedId),Integer.parseInt(postVoteChange));
         }
 
+    }
+
+    @GetMapping(path="/home/posts")
+    public ResponseEntity<String> getHomePosts(@RequestHeader String pageNo){
+        List<Post> postList = sqlRepo.getHomePosts(Integer.parseInt(pageNo));
+
+        JsonArrayBuilder arrayBlder = Json.createArrayBuilder();
+        for(Post post : postList){
+            arrayBlder = arrayBlder.add(post.toJSON());
+        }
+
+        JsonArray result = arrayBlder.build();
+
+        return ResponseEntity.ok().body(result.toString());
+    }
+
+    @GetMapping(path="/restaurants")
+    public ResponseEntity<String> getRestDetails(@RequestHeader String restId, @RequestHeader String pageNo){
+
+        JsonObject postList = sqlRepo.getRestDetails(restId, Integer.parseInt(pageNo));
+
+        return ResponseEntity.ok().body(postList.toString());
     }
 
 }

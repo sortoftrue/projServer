@@ -3,6 +3,7 @@ package com.james.projServer.Services;
 import java.io.StringReader;
 
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.RequestEntity;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -59,9 +60,40 @@ public class GoogleCalendar {
 
     public Boolean insertEvent(String calendarId, String date, String time, String location, String credentials) {
 
-        parseDate(date, time);
+        String eventTime = parseDate(date, time);
 
+        DateTime googleDate = DateTime.parseRfc3339(eventTime);
+        System.out.println("google Date" + googleDate.toString());
+        DateTime convertedDate = new DateTime((googleDate.getValue()+900000));
+        System.out.println("+15mins date" + convertedDate.toString().substring(0, 19)+"+08:00");
+        DateTime shiftedDate = new DateTime((googleDate.getValue()+900000) + 480);
+        System.out.println(shiftedDate.toString().substring(0, 19)+"+08:00");
 
+        String url = "https://www.googleapis.com/calendar/v3/calendars/" + calendarId + "/events";
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization", "Bearer " + credentials);
+
+        JsonObject eventBody = Json.createObjectBuilder()
+            .add("start", 
+                Json.createObjectBuilder().add("dateTime",eventTime).build())
+            .add("end",
+                Json.createObjectBuilder().add("dateTime",shiftedDate.toString().substring(0, 19)+"+08:00").build())
+            .add("summary","Check out"+location)
+            .build();
+
+        // Create the /post request
+        RequestEntity<String> req = RequestEntity.post(url).headers(headers).contentType(MediaType.APPLICATION_JSON).body(eventBody.toString());
+
+        RestTemplate template = new RestTemplate();
+
+        ResponseEntity<String> resp = template.exchange(req, String.class);
+
+        System.out.printf("status code:%d\n", resp.getStatusCodeValue());
+
+        String payload = resp.getBody();
+
+        System.out.println(payload);
 
         return null;
     }

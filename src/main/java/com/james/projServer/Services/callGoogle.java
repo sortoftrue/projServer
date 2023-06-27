@@ -2,6 +2,7 @@ package com.james.projServer.Services;
 
 import java.io.StringReader;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.RequestEntity;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -16,8 +17,8 @@ import jakarta.json.JsonString;
 @Service
 public class CallGoogle {
 
-    // @Value("${GOOGLEAPIKEY}")
-    String apiKey = "AIzaSyBV4lDFRmFpznvR0O6ys8DT9tjzurjDLmc";
+    @Value("${GOOGLEAPIKEY}")
+    String apiKey;
 
     public String[] getGplaceName(String gplaceId){
 
